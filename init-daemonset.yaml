@@ -1,0 +1,59 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-initializer
+  labels:
+    app: default-init
+spec:
+  selector:
+    matchLabels:
+      app: default-init
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: node-initializer
+        app: default-init
+    spec:
+      volumes:
+      - name: root-mount
+        hostPath:
+          path: /
+      - name: entrypoint
+        configMap:
+          name: init-entrypoint
+          defaultMode: 0744
+      - name: pki
+        secret:
+          secretName: init-pki
+      initContainers:
+      - image: alpine:3.12.0
+        name: node-initializer
+        command: ["/scripts/entrypoint.sh"]
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: root-mount
+          mountPath: /host
+        - name: entrypoint
+          mountPath: /scripts
+        - name: pki
+          mountPath: /pki
+      containers:
+      - image: "gcr.io/google-containers/pause:2.0"
+        name: pause
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-entrypoint
+  labels:
+    app: default-init
+data:
+  entrypoint.sh: |
+    #!/usr/bin/env sh
+
+    mkdir -p /host/etc/docker/certs.d/artifactory.local/
+    cp /pki/ca.crt /host/etc/docker/certs.d/artifactory.local/ca.crt
